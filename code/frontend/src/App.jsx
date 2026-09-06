@@ -7,7 +7,7 @@ import WebsiteLoadTestSection from "./components/WebsiteLoadTestSection";
 import LoadTestConfig from "./components/LoadTestConfig";
 import { colors, font, space } from "./theme";
 
-const BASE = "https://pig-way-gamecube-shared.trycloudflare.com";
+const BASE = "https://norm-mem-temperature-few.trycloudflare.com";
 
 export default function App() {
   const [url, setUrl] = useState("https://httpbin.org/post");
