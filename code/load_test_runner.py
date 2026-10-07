@@ -22,7 +22,9 @@ USE_SQS = os.environ.get("USE_SQS", "false").lower() == "true"
 # users. Requests above this get split into multiple child jobs so several
 # worker pods can process them in parallel.
 SPLIT_THRESHOLD = 50
-MAX_CHILD_JOBS = 10
+# app.MAX_USERS (1000) / SPLIT_THRESHOLD (50) = 20: the fewest children that
+# keeps every child at or under the threshold for any accepted request.
+MAX_CHILD_JOBS = 20
 
 
 def _run_api_job(job_id, target_url, target_path, cases, users, spawn_rate, duration_seconds):
