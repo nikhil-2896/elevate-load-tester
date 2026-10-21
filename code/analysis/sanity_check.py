@@ -1,6 +1,8 @@
 import requests
 from urllib.parse import urlparse
 
+from testkit.safety import check_url, UnsafeTarget
+
 def is_valid_url_format(url: str) -> bool:
     try:
         result = urlparse(url)
@@ -47,6 +49,11 @@ def check_reachability(url: str, timeout: float = 5.0) -> dict:
 def sanity_check(url: str) -> dict:
     if not is_valid_url_format(url):
         return {"valid_format": False, "reachable": False, "error": "Malformed URL"}
+
+    try:
+        check_url(url, strict_dns=False)
+    except UnsafeTarget as e:
+        return {"valid_format": True, "reachable": False, "error": str(e)}
 
     reach_result = check_reachability(url)
     return {"valid_format": True, **reach_result}

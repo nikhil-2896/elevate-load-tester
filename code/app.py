@@ -1,10 +1,12 @@
 from urllib.parse import urlparse
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 from analysis.sanity_check import sanity_check
 from analysis.type_detector import detect_type, try_find_sitemap, extract_paths_from_sitemap
 from analysis.edge_cases import generate_edge_cases
 from load_test_runner import start_load_test, start_website_load_test, get_job_status, get_group_status
+from testkit.safety import check_url, UnsafeTarget
 from job_store import init_db, list_jobs, list_job_groups
 
 app = Flask(__name__)
@@ -18,13 +20,21 @@ MAX_SPAWN_RATE = 20
 
 @app.errorhandler(Exception)
 def handle_uncaught_exception(e):
+    # Let Flask's own HTTP errors (404, 405, ...) keep their status code.
+    if isinstance(e, HTTPException):
+        return jsonify({"error": e.name.lower().replace(" ", "_")}), e.code
     app.logger.exception("Unhandled exception")
-    return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
+    return jsonify({"error": "internal_server_error"}), 500
 
 
 @app.errorhandler(404)
 def handle_404(e):
     return jsonify({"error": "not_found"}), 404
+
+
+@app.errorhandler(405)
+def handle_405(e):
+    return jsonify({"error": "method_not_allowed"}), 405
 
 
 @app.route("/api/health", methods=["GET"])
@@ -140,6 +150,11 @@ def start_load_test_endpoint():
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return jsonify({"error": "url must be a valid http(s) URL"}), 400
 
+    try:
+        check_url(target_url, strict_dns=False)
+    except UnsafeTarget as e:
+        return jsonify({"error": str(e)}), 400
+
     host = f"{parsed.scheme}://{parsed.netloc}"
     path = parsed.path or "/"
 
@@ -164,6 +179,11 @@ def start_website_load_test_endpoint():
     parsed = urlparse(target_url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return jsonify({"error": "url must be a valid http(s) URL"}), 400
+
+    try:
+        check_url(target_url, strict_dns=False)
+    except UnsafeTarget as e:
+        return jsonify({"error": str(e)}), 400
 
     host = f"{parsed.scheme}://{parsed.netloc}"
 

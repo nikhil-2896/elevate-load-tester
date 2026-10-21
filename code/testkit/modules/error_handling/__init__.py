@@ -1,0 +1,1 @@
+from testkit.modules.error_handling.module import ErrorHandling  # noqa: F401  (registers itself)

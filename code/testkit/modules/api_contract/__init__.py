@@ -1,0 +1,1 @@
+from testkit.modules.api_contract.module import ApiContract  # noqa: F401  (registers itself)
