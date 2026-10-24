@@ -8,10 +8,12 @@ from analysis.edge_cases import generate_edge_cases
 from load_test_runner import start_load_test, start_website_load_test, get_job_status, get_group_status
 from testkit.safety import check_url, UnsafeTarget
 from job_store import init_db, list_jobs, list_job_groups
+from testkit.api import bp as testkit_blueprint
 
 app = Flask(__name__)
 CORS(app)
 init_db()
+app.register_blueprint(testkit_blueprint)
 
 MAX_USERS = 1000
 MAX_DURATION_SECONDS = 300

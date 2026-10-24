@@ -7,7 +7,7 @@ import WebsiteLoadTestSection from "./components/WebsiteLoadTestSection";
 import LoadTestConfig from "./components/LoadTestConfig";
 import { colors, font, space } from "./theme";
 
-const BASE = "https://norm-mem-temperature-few.trycloudflare.com";
+import { BASE } from "./config";
 
 export default function App() {
   const [url, setUrl] = useState("https://httpbin.org/post");

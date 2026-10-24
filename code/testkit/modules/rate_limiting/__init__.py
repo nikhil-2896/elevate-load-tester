@@ -1,0 +1,1 @@
+from testkit.modules.rate_limiting.module import RateLimiting  # noqa: F401  (registers itself)

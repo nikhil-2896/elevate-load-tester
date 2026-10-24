@@ -1,0 +1,1 @@
+from testkit.modules.load.module import LoadTest  # noqa: F401  (registers itself)
