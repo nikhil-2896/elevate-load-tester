@@ -84,10 +84,12 @@ def plan_endpoint():
 
 
 @bp.post("/runs")
+
 def start_run_endpoint():
     target, criteria, options = _read_target(request.get_json(silent=True) or {})
     if criteria is None:
         return target
+    store.reap_stale()
     active = [r for r in store.list_runs(50) if r["status"] in ("queued", "running")]
     if len(active) >= MAX_ACTIVE_RUNS:
         return _bad("too many tests are running; try again in a minute", 429)

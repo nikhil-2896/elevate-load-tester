@@ -37,7 +37,11 @@ def parse_stats(csv_text):
     rows = _parse_csv(csv_text)
     if not rows:
         return None
-    num = lambda row, key: float(row.get(key) or 0)
+    def num(row, key):
+        try:
+            return float(row.get(key) or 0)
+        except ValueError:      # Locust writes "N/A" when nothing was recorded
+            return 0.0
     for row in rows:
         if row.get("Name") == "Aggregated":
             return {"requests": int(num(row, "Request Count")), "failures": int(num(row, "Failure Count")),

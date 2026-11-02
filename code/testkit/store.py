@@ -1,33 +1,23 @@
-"""Saves test runs and their results in the same SQLite file as the load
-tester (DB_PATH). Tables are added beside the existing ones; nothing existing
-is changed.
+"""Saves test runs and their results in the same database as the load tester
+(PostgreSQL when DATABASE_URL is set, otherwise the SQLite file in DB_PATH).
+Tables are added beside the existing ones; nothing existing is changed.
 
 The target's auth token is never stored.
 """
 import json
-import os
-import sqlite3
 import threading
-from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 
+import db
 from testkit.models import Status, worst
 
 _lock = threading.Lock()
-
-
-@contextmanager
-def _conn():
-    conn = sqlite3.connect(os.environ.get("DB_PATH", "load_tests.db"), timeout=10)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+_conn = db.connect      # other modules (ownership) open connections through here
 
 
 def init_store():
     with _conn() as c:
+        c.ddl_lock()
         c.execute("""
             CREATE TABLE IF NOT EXISTS test_runs (
                 run_id TEXT PRIMARY KEY,
@@ -39,9 +29,9 @@ def init_store():
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 completed_at TEXT
             )""")
-        c.execute("""
+        c.execute(f"""
             CREATE TABLE IF NOT EXISTS test_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id {db.autoinc_pk()},
                 run_id TEXT,
                 position INTEGER,
                 module TEXT,
@@ -106,6 +96,19 @@ def list_runs(limit=50):
     with _conn() as c:
         rows = c.execute(
             "SELECT run_id, target_url, status, created_at, completed_at "
-            "FROM test_runs ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+            "FROM test_runs ORDER BY created_at DESC" + ("" if db.is_postgres() else ", rowid DESC")
+            + " LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def reap_stale(max_age_s=1800):
+    """Marks runs that started long ago and never finished as failed. This
+    happens when an instance is stopped mid-run; without it those runs would
+    count as active forever and block new ones. Returns how many were marked."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=max_age_s)).strftime("%Y-%m-%d %H:%M:%S")
+    with _lock, _conn() as c:
+        cur = c.execute(
+            "UPDATE test_runs SET status = 'failed', completed_at = CURRENT_TIMESTAMP "
+            "WHERE status IN ('queued', 'running') AND created_at < ?", (cutoff,))
+        return cur.rowcount

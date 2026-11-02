@@ -1,8 +1,8 @@
-import sqlite3
-import json
 import os
 import threading
 from contextlib import contextmanager
+
+import db
 
 DB_PATH = os.environ.get("DB_PATH", "load_tests.db")
 _lock = threading.Lock()
@@ -10,17 +10,13 @@ _lock = threading.Lock()
 
 @contextmanager
 def _get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    try:
+    with db.connect(DB_PATH) as conn:
         yield conn
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def init_db():
     with _get_conn() as conn:
+        conn.ddl_lock()
         conn.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
                 job_id TEXT PRIMARY KEY,
@@ -54,12 +50,12 @@ def init_db():
                 completed_at TEXT
             )
         """)
-        # Safe to call repeatedly: ignore "duplicate column" if group_id already exists
-        # from a database created before this feature was added.
-        try:
-            conn.execute("ALTER TABLE jobs ADD COLUMN group_id TEXT")
-        except sqlite3.OperationalError:
-            pass
+        # Databases created before group_id existed need the column added.
+        # PostgreSQL tables are always created with it; SQLite is checked first.
+        if not conn.pg:
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()]
+            if "group_id" not in cols:
+                conn.execute("ALTER TABLE jobs ADD COLUMN group_id TEXT")
 
 
 def create_job(job_id, target_url, users, spawn_rate, duration_seconds, group_id=None):

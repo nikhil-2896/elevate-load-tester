@@ -20,6 +20,7 @@ def host_of(url):
 
 def _init():
     with store._conn() as c:
+        c.ddl_lock()
         c.execute("""CREATE TABLE IF NOT EXISTS testkit_ownership (
             host TEXT PRIMARY KEY, token TEXT, verified INTEGER DEFAULT 0, verified_at TEXT)""")
 
@@ -28,12 +29,10 @@ def issue_token(url):
     _init()
     host = host_of(url)
     with store._lock, store._conn() as c:
-        row = c.execute("SELECT token FROM testkit_ownership WHERE host = ?", (host,)).fetchone()
-        if row:
-            return row["token"]
-        token = new_ownership_token()
-        c.execute("INSERT INTO testkit_ownership (host, token) VALUES (?, ?)", (host, token))
-        return token
+        # Two instances may race here; the first insert wins and both read it back.
+        c.execute("INSERT INTO testkit_ownership (host, token) VALUES (?, ?) "
+                  "ON CONFLICT (host) DO NOTHING", (host, new_ownership_token()))
+        return c.execute("SELECT token FROM testkit_ownership WHERE host = ?", (host,)).fetchone()["token"]
 
 
 def verify(url):

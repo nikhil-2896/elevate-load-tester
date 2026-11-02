@@ -157,6 +157,8 @@ def test_t12_12_stats_parser_handles_missing_aggregate_row_and_junk():
     summed = parse_stats(csv_text(requests=50, aggregated=False))
     assert summed["requests"] == 50 and summed["p95_ms"] == 300
     assert parse_stats(csv_text(requests=70))["requests"] == 70
+    empty = parse_stats(csv_text(requests=0, p95="N/A"))     # what Locust writes when nothing ran
+    assert empty["requests"] == 0 and empty["p95_ms"] == 0
 
 
 # ---- registration and one real run --------------------------------------------
