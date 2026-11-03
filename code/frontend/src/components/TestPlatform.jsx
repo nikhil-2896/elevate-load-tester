@@ -71,9 +71,13 @@ function Finding({ f }) {
 }
 
 function Results({ run, base }) {
-  const counts = {};
-  run.results.forEach((r) => r.findings.forEach((f) => (counts[f.status] = (counts[f.status] || 0) + 1)));
-  const verdict = run.verdict || (run.status === "failed" ? "error" : null);
+  // Fetched with the API key header, then shown from a local blob so the key never appears in a URL.
+  async function openReport() {
+    const resp = await fetch(`${base}/api/v2/runs/${run.run_id}/report.html`);
+    if (!resp.ok) return;
+    const html = await resp.text();
+    window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
+  }
   return (
     <>
       <div
@@ -109,15 +113,15 @@ function Results({ run, base }) {
         </div>
       ))}
       {run.status === "done" && (
-        <a href={`${base}/api/v2/runs/${run.run_id}/report.html`} target="_blank" rel="noreferrer" style={{ color: colors.accent, fontSize: 14 }}>
+                <button onClick={openReport} style={{ background: "none", border: "none", padding: 0, color: colors.accent, fontSize: 14, cursor: "pointer" }}>
           Open printable report ↗
-        </a>
+        </button>
       )}
     </>
   );
 }
 
-export default function TestPlatform({ base }) {
+export default function TestPlatform({ base, keyVersion = 0 }) {
   const [url, setUrl] = useState("");
   const [openapiUrl, setOpenapiUrl] = useState("");
   const [token, setToken] = useState("");
@@ -134,10 +138,15 @@ export default function TestPlatform({ base }) {
   useEffect(() => {
     fetch(`${base}/api/v2/criteria`)
       .then((r) => r.json())
-      .then(setCriteriaList)
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setCriteriaList(data);
+          setError(null);
+        } else setError(data.error || "Unexpected response from the backend.");
+      })
       .catch(() => setError("Could not reach the backend. Is it running, and is VITE_API_BASE correct?"));
     return () => clearTimeout(timer.current);
-  }, [base]);
+  }, [base, keyVersion]);
 
   const selectedCriteria = Object.keys(chosen).filter((k) => chosen[k]);
 

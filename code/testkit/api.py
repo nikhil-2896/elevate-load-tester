@@ -1,5 +1,7 @@
 """HTTP endpoints of the testing platform, under /api/v2."""
+import hmac
 import json
+import os
 from urllib.parse import urlparse
 
 from flask import Blueprint, Response, jsonify, request
@@ -15,6 +17,22 @@ bp = Blueprint("testkit", __name__, url_prefix="/api/v2")
 registry.discover()
 store.init_store()
 
+PUBLIC_PATHS = ("/api/health",)
+
+
+@bp.before_app_request
+def require_api_key():
+    """When TESTKIT_API_KEY is set, every /api/ request must carry it in the
+    X-API-Key header (the health check stays open for the load balancer).
+    Covers the old Load Tester endpoints too. Unset = open, for local use."""
+    expected = os.environ.get("TESTKIT_API_KEY", "")
+    if (not expected or request.method == "OPTIONS" or request.path in PUBLIC_PATHS
+            or not request.path.startswith("/api/")):
+        return None
+    given = request.headers.get("X-API-Key", "")
+    if not hmac.compare_digest(given.encode(), expected.encode()):
+        return jsonify({"error": "missing or invalid API key"}), 401
+    return None
 MAX_ACTIVE_RUNS = 3
 MAX_OPTIONS_BYTES = 20_000
 

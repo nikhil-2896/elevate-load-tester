@@ -38,6 +38,17 @@ class BudgetExceeded(RuntimeError):
 def _allow_private_default():
     return os.environ.get("TESTKIT_ALLOW_PRIVATE", "").strip().lower() == "true"
 
+def _host_allowed(host):
+    """TESTKIT_ALLOWED_HOSTS limits which hosts the platform may call at all
+    (the program's in-scope list). Comma separated; 'api.example.com' matches
+    that host only and '*.example.com' matches its subdomains. Unset = no limit."""
+    patterns = [p.strip().lower() for p in os.environ.get("TESTKIT_ALLOWED_HOSTS", "").split(",")
+                if p.strip()]
+    if not patterns:
+        return True
+    host = host.lower()
+    return any(host == p or (p.startswith("*.") and host.endswith(p[1:])) for p in patterns)
+
 
 def _is_blocked(ip):
     if ip.version == 6 and ip.ipv4_mapped is not None:
@@ -65,6 +76,8 @@ def check_url(url, allow_private=None, strict_dns=True, resolver=socket.getaddri
         raise UnsafeTarget("only http(s) URLs with a host are allowed")
     if parsed.username is not None or parsed.password is not None:
         raise UnsafeTarget("credentials in the URL are not allowed")
+    if not _host_allowed(host):
+        raise UnsafeTarget("host is not in this platform's allowed list")
 
     try:
         addresses = [ipaddress.ip_address(host)]
