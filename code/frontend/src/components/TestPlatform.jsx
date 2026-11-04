@@ -78,6 +78,9 @@ function Results({ run, base }) {
     const html = await resp.text();
     window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
   }
+  const counts = {};
+  run.results.forEach((r) => (r.findings || []).forEach((f) => (counts[f.status] = (counts[f.status] || 0) + 1)));
+  const verdict = run.verdict || (run.status === "failed" ? "error" : null);
   return (
     <>
       <div
@@ -100,20 +103,20 @@ function Results({ run, base }) {
           <div style={{ display: "flex", alignItems: "center" }}>
             <Badge status={r.status} />
             <strong>{r.module}</strong>
-            <span style={{ marginLeft: "auto", color: colors.textMuted, fontSize: 12 }}>{r.duration_s.toFixed(1)}s</span>
+            <span style={{ marginLeft: "auto", color: colors.textMuted, fontSize: 12 }}>{Number(r.duration_s || 0).toFixed(1)}s</span>
           </div>
           {Object.keys(r.metrics || {}).length > 0 && (
             <div style={{ color: colors.textMuted, fontSize: 12, fontFamily: font.mono, margin: `${space.xs}px 0` }}>
               {Object.entries(r.metrics).map(([k, v]) => `${k}=${v}`).join("  ")}
             </div>
           )}
-          {[...r.findings].sort((a, b) => ORDER[a.status] - ORDER[b.status]).map((f) => (
+          {[...(r.findings || [])].sort((a, b) => ORDER[a.status] - ORDER[b.status]).map((f) => (
             <Finding key={f.check_id + f.title} f={f} />
           ))}
         </div>
       ))}
       {run.status === "done" && (
-                <button onClick={openReport} style={{ background: "none", border: "none", padding: 0, color: colors.accent, fontSize: 14, cursor: "pointer" }}>
+        <button onClick={openReport} style={{ background: "none", border: "none", padding: 0, color: colors.accent, fontSize: 14, cursor: "pointer" }}>
           Open printable report ↗
         </button>
       )}
@@ -203,10 +206,26 @@ export default function TestPlatform({ base, keyVersion = 0 }) {
       setRun(null);
       const started = await post("/api/v2/runs", body());
       setPlan({ ownership_verified: plan?.ownership_verified, selected: started.selected, skipped: started.skipped });
+      let failures = 0;
       const poll = async () => {
-        const data = await (await fetch(`${base}/api/v2/runs/${started.run_id}`)).json();
-        setRun(data);
-        if (data.status !== "done" && data.status !== "failed") timer.current = setTimeout(poll, 1500);
+        try {
+          const resp = await fetch(`${base}/api/v2/runs/${started.run_id}`);
+          const data = await resp.json();
+          if (!resp.ok || !Array.isArray(data.results)) {
+            throw new Error(data.error || data.message || `Status check failed (${resp.status})`);
+          }
+          failures = 0;
+          setError(null);
+          setRun(data);
+          if (data.status !== "done" && data.status !== "failed") timer.current = setTimeout(poll, 1500);
+        } catch (e) {
+          failures += 1;
+          if (failures >= 5) {
+            setError(`Lost contact with the run (${e.message}). It may still be running; try again shortly.`);
+            return;
+          }
+          timer.current = setTimeout(poll, 3000);
+        }
       };
       poll();
     });
